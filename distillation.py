@@ -95,8 +95,9 @@ class EfficientVITFeatureExtractor:
         self.device = device
         self._features = None
         found_pooling = False
-        self.model.head.op_list[0] = torch.nn.Sequential(ConvLayer(256, 384, 1, norm="bn2d", act_func="hswish")) # match channel number
-        self.model.head.op_list[2] = torch.nn.Sequential(LinearLayer(384, 1600, False, norm="ln", act_func="hswish")) # 1600 should be changed based on the model selected. See cls.py
+        # uncomment these 2 lines in distillation; comment these in evaluation
+        # self.model.head.op_list[0] = torch.nn.Sequential(ConvLayer(256, 384, 1, norm="bn2d", act_func="hswish")) # match channel number
+        # self.model.head.op_list[2] = torch.nn.Sequential(LinearLayer(384, 1600, False, norm="ln", act_func="hswish")) # 1600 should be changed based on the model selected. See cls.py
         self.model = model.to(device)
         # Iterate through the modules in ClsHead to find the AdaptiveAvgPool2d layer
         for module in reversed(list(self.model.head.modules())):
@@ -188,7 +189,7 @@ def train():
                 ]
             ),
         ),
-        batch_size=64,
+        batch_size=64, # b1 - 64
         shuffle=True,
         num_workers=0,
         pin_memory=True,
@@ -216,12 +217,12 @@ def train():
     )
 
     resize_efficient_vit = transforms.Resize([512, 512])
-    last_layer = 11
+    last_layer = 10
 
     teacher_model = DinoV2ExtractFeatures(dino_model="dinov2_vits14", layer=last_layer, device="cuda")
     teacher_model.trainable_parameters = False
 
-    student_model = create_cls_model("b1-r256", False, dropout=0)
+    student_model = create_cls_model("b1-r256", True, dropout=0) # pretrained
 
     # Creating the feature extractor does not modify the model's parameters
     feature_extractor = EfficientVITFeatureExtractor(student_model, device="cuda")
@@ -280,8 +281,8 @@ def train():
         print("Epoch:", epoch,"validating loss:", val_loss)
         writer.add_scalar("validating loss", val_loss, epoch)
 
-        torch.save(student_model, f"./outputs/student_model_lr=0.005-25_{epoch}.pth")
-        print(f"model student_model_lr=0.005-25_{epoch}.pth is successfully saved!")
+        torch.save(student_model, f"./outputs/student_model_vits_b1-r256_p_{epoch}.pth")
+        print(f"model student_model_vits_b1-r256_p_{epoch}.pth is successfully saved!")
     writer.close()
 
 if __name__ == "__main__":
